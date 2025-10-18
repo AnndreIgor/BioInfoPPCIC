@@ -1,0 +1,33 @@
+{
+    "algoritmo": "clustalw",
+    "parametros": {
+        "-TYPE": "PROTEIN",
+        "-ALIGN": true,
+        "-OUTPUT": "CLUSTAL",
+        "-OUTORDER": "ALIGNED",
+        "-GAPOPEN": 9.1,
+        "-GAPEXT": 0.37,
+        "-QUIET": true
+    },
+    "tree_format": "nexus",
+    "entradas": [
+        "PLASMODIUM2.fasta",
+        "PLASMODIUM8.fasta",
+        "PLASMODIUM19.fasta",
+        "PLASMODIUM23.fasta",
+        "PLASMODIUM22.fasta",
+        "PLASMODIUM11.fasta",
+        "PLASMODIUM5.fasta",
+        "PLASMODIUM0.fasta",
+        "PLASMODIUM29.fasta",
+        "PLASMODIUM16.fasta",
+        "PLASMODIUM14.fasta",
+        "PLASMODIUM21.fasta",
+        "PLASMODIUM30.fasta",
+        "PLASMODIUM25.fasta",
+        "PLASMODIUM27.fasta",
+        "PLASMODIUM26.fasta",
+        "PLASMODIUM24.fasta",
+        "PLASMODIUM3.fasta"
+    ]
+}
