@@ -5,20 +5,12 @@
 import logging
 import subprocess
 import os
-import numpy as np
-import matplotlib.pyplot as plt
 import json
 import time
-import pandas as pd
-import random
-import sqlite3
 import datetime as dt
 import sys
 
 from pathlib import Path
-
-from concurrent.futures import ProcessPoolExecutor
-from typing import Iterable, List
 
 # %%
 from Bio.Phylo.TreeConstruction import DistanceCalculator, DistanceTreeConstructor
@@ -29,6 +21,14 @@ from analise_fasta import analisar_fasta
 from system_info import system_summary
 
 # %%
+import parsl
+from parsl import python_app, ThreadPoolExecutor
+from concurrent.futures import wait
+
+# %%
+NUCLEOS = int(os.getenv("NSLOTS", "4"))
+
+# %%
 PATH_DATA = Path('../data')
 INPUT_SEQUENCES = PATH_DATA / 'full_dataset_plasmodium'
 PATH_OUT = PATH_DATA / 'out'
@@ -37,7 +37,24 @@ ARVORES_FILOGENETICAS = PATH_OUT / 'Trees'
 SUBARVORES = PATH_OUT / 'Subtrees'
 PROVENANCE = PATH_DATA / 'provenance'
 SIMILARIDADES = PATH_OUT / 'Similaridades'
-NOME_ARQUIVO = PROVENANCE
+
+# %%
+# Criar diretórios de saída, se não existirem
+os.makedirs(PATH_OUT, exist_ok=True)
+os.makedirs(SEQUENCIAS_ALINHADAS, exist_ok=True)
+os.makedirs(ARVORES_FILOGENETICAS, exist_ok=True)
+os.makedirs(SUBARVORES, exist_ok=True)
+os.makedirs(SIMILARIDADES, exist_ok=True)
+os.makedirs(PROVENANCE, exist_ok=True)
+
+# %%
+# --- Configuração do Parsl ---
+parsl.load(
+    parsl.config.Config(
+        executors=[ThreadPoolExecutor(max_threads=NUCLEOS)],
+        strategy=None
+    )
+)
 
 # %% [markdown]
 # ### Gera os paramtros de sequencias e entradas aleatórias
@@ -45,6 +62,33 @@ NOME_ARQUIVO = PROVENANCE
 # %%
 from gera_json import gera_parametros_aleatorios
 gera_parametros_aleatorios()
+
+# %% [markdown]
+# ### Utilitárias
+
+# %%
+def dividir_lista(lista, n_partes):
+    k, m = divmod(len(lista), n_partes)
+    return [lista[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n_partes)]
+
+
+def calcula_numero_comparacoes(m: int, n: int) -> int:
+    """
+    Calcula f(m, n) = C(m, 2) * n² = (m * (m - 1) // 2) * n ** 2.
+
+    Parâmetros
+    ----------
+    m : int
+        Inteiro não-negativo (m ≥ 0).
+    n : int
+        Inteiro (pode ser zero ou positivo).
+
+    Retorno
+    -------
+    int
+        Valor de f(m, n).
+    """
+    return (m * (m - 1) // 2) * n ** 2
 
 # %% [markdown]
 # ### Pega os dados das sequencias
@@ -156,116 +200,53 @@ def analisar_sequencias_fasta(config_file: Path) -> list:
 # ### Função de alinhamento sequências
 
 # %%
-def alinhar_sequencia(infile: Path, outfile: Path):
-    with open("config.json", "r", encoding="utf-8") as arquivo:
-        par = json.load(arquivo)
-
-    command = []
-
-    command.append(par['algoritmo'])
-
-    match par['algoritmo']:
-        case "mafft":
-            for key, value in par['parametros'].items():
-                if isinstance(value, bool) and value:
-                    command.append(key)
-                else:
-                    command.append(f"{key} {value}")
-
-            command.append(f"{infile}")
-            
-            print("Executando comando:", ' '.join(command))
-
-            with open(outfile, "w") as out:
-                result = subprocess.run(
-                    command,
-                    stdout=out,
-                    stderr=subprocess.PIPE,  # captura stderr
-                    text=True                 # recebe str em vez de bytes
-                )
-
-            # exibe erro só se houver
-            if result.stderr and result.stderr.strip():
-                return "Erro durante execução:" + result.stderr.strip()
-
-            
+@python_app
+def alinhar_sequencias(parametros: dict, files: list[Path]) -> None:
+    match parametros['algoritmo']:
         case "clustalw":
-            command.append(f"-INFILE={infile}")
-            command.append(f"-OUTFILE={outfile}")
+            command_parameters = []
 
-            for key, value in par['parametros'].items():
+            for key, value in parametros['parametros'].items():
                 if isinstance(value, bool) and value:
-                    command.append(key)
+                    command_parameters.append(key)
                 else:
-                    command.append(f"{key}={value}")
+                    command_parameters.append(f"{key}={value}")
 
-            result = subprocess.run(command, capture_output=True, text=True)
+            for infile in files:
+                command_files = [f"-INFILE={infile}"]
+                command_files.append(f"-OUTFILE={SEQUENCIAS_ALINHADAS / infile.with_suffix('.aln').name}")
 
-            if result.stderr and result.stderr.strip():
-                print("Erro durante execução:", result.stderr.strip(), file=sys.stderr)
+                command = ["clustalw"] + command_parameters + command_files
+                result = subprocess.run(command, capture_output=True, text=True)
 
-        case "probcons":
-            for key, value in par['parametros'].items():
-                # if isinstance(par[key], list):
-                #     value = random.choice(par[key])
-
-                if isinstance(value, bool) and value:
-                    command.append(key)
-                else:
-                    command.append(f"{key} {value}")
-
-            command.append(f"{infile}")
-                        
-            with open(outfile, "w") as out:
-                subprocess.run(command, stdout=out, stderr=subprocess.DEVNULL)
-    
-    return None
-
-# %% [markdown]
-# ### Função para calcular o número de comparações necessárias
-
-# %%
-def calcula_numero_comparacoes(m: int, n: int) -> int:
-    """
-    Calcula f(m, n) = C(m, 2) * n² = (m * (m - 1) // 2) * n ** 2.
-
-    Parâmetros
-    ----------
-    m : int
-        Inteiro não-negativo (m ≥ 0).
-    n : int
-        Inteiro (pode ser zero ou positivo).
-
-    Retorno
-    -------
-    int
-        Valor de f(m, n).
-    """
-    return (m * (m - 1) // 2) * n ** 2
-
+                if result.stderr and result.stderr.strip():
+                    print("Erro durante execução:", result.stderr.strip(), file=sys.stderr)
 
 # %% [markdown]
 # ### Construção de árvores filogenéticas
 
 # %%
-# Constroi a arvore filogenética
-def constructor_tree(arquivo_alinhamentos: Path, path_out_tree: Path, output_format):
-    # Lê o arquivo do alinhamento de sequencias
-    with arquivo_alinhamentos.open("r") as handle:
-        alignment = AlignIO.read(handle, "clustal")
-    
+@python_app
+def constructor_tree(arquivos_alinhamento: list[Path], output_format):
+    for arquivo_alinhamentos in arquivos_alinhamento:
+        with arquivo_alinhamentos.open("r") as handle:
+            alignment = AlignIO.read(handle, "clustal")
+            
+        calculator = DistanceCalculator('identity')
+        distance_matrix = calculator.get_distance(alignment)
 
-    calculator = DistanceCalculator('identity')
-    distance_matrix = calculator.get_distance(alignment)
+        # Escolha do modelo evolutivo nj ou upgma
+        tree = DistanceTreeConstructor().nj(distance_matrix)
 
-    # Escolha do modelo evolutivo nj ou upgma
-    tree = DistanceTreeConstructor().nj(distance_matrix)
-    Phylo.write(tree, path_out_tree, output_format) # Escreve em arquivo
+        # Escreve o arquivo de saida
+        path_out_tree = ARVORES_FILOGENETICAS / arquivo_alinhamentos.with_suffix("." + output_format).name
+        Phylo.write(tree, path_out_tree, output_format) # Escreve em arquivo
 
 # %% [markdown]
 # ### Construção das subárvores
 
 # %%
+# @python_app
 def sub_tree(path, name_subtree, data_format: str, data_output_path: Path, extension_format: str):
     # Salva a árvore
     tree = Phylo.read(path, data_format) # Lê de arquivo
@@ -296,77 +277,52 @@ def preencher_matriz(matriz, valor_preenchimento, max_columns: int):
 # ### Comparação entre subárvores
 
 # %%
-def _count_chunk(chunk: Iterable[str], set2: set) -> int:
-    # função que roda em outro processo
-    return sum(1 for x in chunk if x in set2)
-
-def chunks_from_list(lst: List[str], n_chunks: int) -> List[List[str]]:
-    # cria n_chunks balanceados (slice step pode também ser usado)
-    k, m = divmod(len(lst), n_chunks)
-    chunks = []
-    start = 0
-    for i in range(n_chunks):
-        end = start + k + (1 if i < m else 0)
-        chunks.append(lst[start:end])
-        start = end
-    return chunks
-
-def grade_maf_parallel(path_1: Path, path_2: Path, data_format: str, n_workers: int = None) -> float:
-    if path_1 is None or path_2 is None:
-        return -1.0
-
-    subtree_1 = Phylo.read(path_1, data_format)
-    subtree_2 = Phylo.read(path_2, data_format)
-
-    names1 = list({t.name for t in subtree_1.get_terminals() if t.name is not None})
-    set2 = {t.name for t in subtree_2.get_terminals() if t.name is not None}
-
-    if not names1 or not set2:
-        return 0.0
-
-    if n_workers is None:
-        n_workers = max(1, os.cpu_count() - 1)
-
-    # se poucos elementos, evita paralelismo
-    if len(names1) < 10000 or n_workers == 1:
-        common_count = sum(1 for x in names1 if x in set2)
-    else:
-        chunks = chunks_from_list(names1, n_workers)
-        with ProcessPoolExecutor(max_workers=n_workers) as ex:
-            futures = [ex.submit(_count_chunk, ch, set2) for ch in chunks]
-            common_count = sum(f.result() for f in futures)
-
-    max_possible_maf = min(len(names1), len(set2))
-    return round(common_count / max_possible_maf, 2)
-
-
-# %%
-# Geração das subárvores possíveis
 def subarvores_possiveis(dir: Path, tree_format: str) -> list[str]:
     # matriz com todas as subárvores
     matriz_subtree = []
 
-    for name_file in os.listdir(dir):
-        if (name_file != "file.gitkeep"):
-            matriz_subtree.append(sub_tree(
-                dir / name_file,
-                name_file,
+    for file in ARVORES_FILOGENETICAS.iterdir():
+        matriz_subtree.append(
+            sub_tree(
+                file,
+                file.name,
                 tree_format,
                 SUBARVORES,
                 tree_format
-            ))
+            )
+        )
 
     return matriz_subtree
 
 # %%
-def calcula_similaridade(max_rows: int, max_columns: int, matriz_subtree: list[list[Path]], tree_format: str, num_workers:int = 4) -> dict:
+def grade_maf(path_1: str, path_2: str, tree_format: str) -> float:
+    # Verifica se os caminhos das subárvores existe
+    if path_1 is None or path_2 is None:
+        return None
+    
+    subtree_1 = Phylo.read(path_1, tree_format)
+    subtree_2 = Phylo.read(path_2, tree_format)
+
+    list_1 = {i.name for i in subtree_1.get_terminals()}
+    list_2 = {i.name for i in subtree_2.get_terminals()}
+
+    size_list_1 = len(list_1)
+    size_list_2 = len(list_2)
+
+    intersection = list_1.intersection(list_2)
+
+    return len(intersection) / max(size_list_1, size_list_2)
+
+# %%
+@python_app
+def calcula_similaridade(max_rows: int, max_columns: int, matriz_subtree: list[list[Path]], tree_format: str) -> dict:
     dict_maf_database = {}
 
     for i in range(max_rows):
         for j in range(max_columns):
             for k in range(i + 1, max_rows):
                 for l in range(max_columns):
-                    g_maf = grade_maf_parallel(matriz_subtree[i][j], matriz_subtree[k][l], tree_format, num_workers)
+                    g_maf = grade_maf(matriz_subtree[i][j], matriz_subtree[k][l], tree_format)
 
                     if g_maf is not None and g_maf >= 0:
                         if g_maf not in dict_maf_database:
@@ -392,46 +348,30 @@ clean_subtrees()
 lista_saida = []
 if __name__ == '__main__':
     inicio = time.perf_counter()
+
+    # Falta validar as serquências
+    analisar_sequencias_fasta("config.json")
     
-    files = analisar_sequencias_fasta(config_file="config.json")
+    with open("config.json", "r", encoding="utf-8") as arquivo:
+        parametros = json.load(arquivo)
 
-    # Contando manual para evitar contar sequências inválidas
-    qtd_sequencias_validas = 0
-        
-    for file in files:
-        # print(file)
-        sequencia_fasta = INPUT_SEQUENCES / file
-        sequencia_alinhada = SEQUENCIAS_ALINHADAS / os.path.split(sequencia_fasta.with_suffix(".aln"))[1]
-        tree_format = "nexus"
+    listas = dividir_lista(list(INPUT_SEQUENCES.iterdir()), NUCLEOS)    # Divide a lista em várias de acordo com o número de núcloes usados
+    futuros = [alinhar_sequencias(parametros, lista) for lista in listas]   # Submete as tarefas ao Parsl
+    wait(futuros)   # Espera todas terminarem
 
-        # Vai até a etapa de geração de árvore filogenética
-        if validate_fasta_protein(sequencia_fasta):
-            if has_duplicate_ids(sequencia_fasta):
-                remove_pipe(sequencia_fasta)
-                
-            erro = alinhar_sequencia(sequencia_fasta, sequencia_alinhada)
-            
-            if erro is not None:
-                # Se cair aqui é pq algum dos parametros está errado
-                print(erro)
-                sys.exit()
+    listas = dividir_lista(list(SEQUENCIAS_ALINHADAS.iterdir()), NUCLEOS)    # Divide a lista em várias de acordo com o número de núcloes usados
+    futuros = [constructor_tree(lista, parametros['tree_format']) for lista in listas]   # Submete as tarefas ao Parsl
+    wait(futuros)   # Espera todas terminarem
 
-            constructor_tree(sequencia_alinhada, ARVORES_FILOGENETICAS / f"{file.replace('.fasta', f'.{tree_format}')}", 'nexus')
+    matriz_subtree = subarvores_possiveis(ARVORES_FILOGENETICAS, parametros['tree_format'])
 
-            qtd_sequencias_validas += 1
-
-    tempo_sciphy = inicio - time.perf_counter()
-    matriz_subtree = subarvores_possiveis(ARVORES_FILOGENETICAS, tree_format)
-        
     max_columns = max(len(row) for row in matriz_subtree)
     max_rows = len(matriz_subtree)
 
     matriz_subtree = preencher_matriz(matriz_subtree, None, max_columns)
 
-    numero_iteracoes = calcula_numero_comparacoes(max_rows, max_columns) # Cálculo do número de comparações
-
-    num_workers = random.randint(2, os.cpu_count() - 1)
-    dict_maf_database = calcula_similaridade(max_rows, max_columns, matriz_subtree, tree_format, num_workers)
+    futures = calcula_similaridade(max_rows, max_columns, matriz_subtree, parametros['tree_format'])
+    dict_maf_database = futures.result()
 
     # Salva o dicionário de similaridades
     with open(SIMILARIDADES / f"similaridades_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}.json", "w", encoding="utf-8") as arquivo:
@@ -441,11 +381,9 @@ if __name__ == '__main__':
     with open(PROVENANCE / "temp.json", "r", encoding="utf-8") as arquivo:
         par = json.load(arquivo)
 
-    par['resultado'] = {"qtdSequencias": qtd_sequencias_validas, 
-                        "NumComparacoes": numero_iteracoes, 
-                        "Inicio": inicio,
+    par['resultado'] = {"Inicio": inicio,
                         "Fim": time.perf_counter(),
-                        "num_procs": num_workers}
+                        "num_procs": NUCLEOS}
         
     par['host'] = system_summary()
         
@@ -454,9 +392,13 @@ if __name__ == '__main__':
         
     os.remove(PROVENANCE / "temp.json")
 
-    clean_NoPipe()
-    clean_tmp()
-    clean_Trees()
-    clean_subtrees()
+# %%
+clean_NoPipe()
+clean_tmp()
+clean_Trees()
+clean_subtrees()
+
+# %%
+
 
 
