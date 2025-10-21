@@ -335,11 +335,13 @@ def calcula_similaridade(max_rows: int, max_columns: int, matriz_subtree: list[l
     
     return dict_maf_database
 
+# %%
+
+
 # %% [markdown]
 # ### Faz a busca das subárvores filogenéticas
 
 # %%
-# Isso tudo pode ser paralelizado
 clean_NoPipe()
 clean_tmp()
 clean_Trees()
@@ -355,7 +357,8 @@ if __name__ == '__main__':
     with open("config.json", "r", encoding="utf-8") as arquivo:
         parametros = json.load(arquivo)
 
-    listas = dividir_lista(list(INPUT_SEQUENCES.iterdir()), NUCLEOS)    # Divide a lista em várias de acordo com o número de núcloes usados
+    files = [INPUT_SEQUENCES / nome for nome in parametros['entradas']]
+    listas = dividir_lista(files, NUCLEOS)    # Divide a lista em várias de acordo com o número de núcloes usados
     futuros = [alinhar_sequencias(parametros, lista) for lista in listas]   # Submete as tarefas ao Parsl
     wait(futuros)   # Espera todas terminarem
 
@@ -377,7 +380,6 @@ if __name__ == '__main__':
     with open(SIMILARIDADES / f"similaridades_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}.json", "w", encoding="utf-8") as arquivo:
         json.dump(dict_maf_database, arquivo, ensure_ascii=False, indent=4)
 
-
     with open(PROVENANCE / "temp.json", "r", encoding="utf-8") as arquivo:
         par = json.load(arquivo)
 
@@ -397,8 +399,5 @@ clean_NoPipe()
 clean_tmp()
 clean_Trees()
 clean_subtrees()
-
-# %%
-
 
 
