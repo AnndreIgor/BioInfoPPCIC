@@ -49,6 +49,7 @@ def gera_parametros_aleatorios():
 
     params = {"algoritmo": "clustalw"}
     params["parametros"] = random_clustalw_align_params()
+    params["tree_format"] = random.choice(["nexus", "newick"])
     params["entradas"] = select_random_fasta_files()
 
     with open("config.json", "w", encoding="utf-8") as arquivo:
@@ -57,10 +58,4 @@ def gera_parametros_aleatorios():
 
 if __name__ == "__main__":
     # gera parâmetros aleatórios com seed para reprodutibilidade
-    params = {"algoritmo": "clustalw"}
-    params["parametros"] = random_clustalw_align_params()
-    params["tree_frormat"] = "nexus"
-    params["entradas"] = select_random_fasta_files()
-
-    with open("config.json", "w", encoding="utf-8") as arquivo:
-        json.dump(params, arquivo, indent=4, ensure_ascii=False)
+    gera_parametros_aleatorios()
