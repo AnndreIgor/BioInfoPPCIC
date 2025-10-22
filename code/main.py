@@ -61,7 +61,6 @@ parsl.load(
 
 # %%
 from gera_json import gera_parametros_aleatorios
-gera_parametros_aleatorios()
 
 # %% [markdown]
 # ### Utilitárias
@@ -346,6 +345,8 @@ clean_NoPipe()
 clean_tmp()
 clean_Trees()
 clean_subtrees()
+
+gera_parametros_aleatorios()
 
 lista_saida = []
 if __name__ == '__main__':
