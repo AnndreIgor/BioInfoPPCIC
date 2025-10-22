@@ -14,6 +14,8 @@ def select_random_fasta_files() -> list[str]:
     """
     fasta_files = [file for file in os.listdir(INPUT_SEQUENCES) if file.endswith('.fasta')]
     num_files = random.randint(2, len(fasta_files))
+    if num_files > 75:
+        num_files = 75
     return random.sample(fasta_files, num_files)
 
 def random_clustalw_align_params(seed: Optional[int] = None) -> Dict[str, Any]:
