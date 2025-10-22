@@ -194,7 +194,7 @@ def analisar_sequencias_fasta(config_file: Path) -> list:
 
     par['entradas'] = resultado
 
-    with open(PROVENANCE / "temp.json", "w", encoding="utf-8") as arquivo:
+    with open(PATH_OUT / "temp.json", "w", encoding="utf-8") as arquivo:
         json.dump(par, arquivo, indent=4, ensure_ascii=False)
 
     return entradas_original
@@ -385,7 +385,7 @@ if __name__ == '__main__':
     with open(SIMILARIDADES / f"similaridades_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}.json", "w", encoding="utf-8") as arquivo:
         json.dump(dict_maf_database, arquivo, ensure_ascii=False, indent=4)
 
-    with open(PROVENANCE / "temp.json", "r", encoding="utf-8") as arquivo:
+    with open(PATH_OUT / "temp.json", "r", encoding="utf-8") as arquivo:
         par = json.load(arquivo)
 
     par['resultado'] = {"Inicio": inicio,
@@ -397,7 +397,7 @@ if __name__ == '__main__':
     with open(PROVENANCE / f"dados_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json", "w", encoding="utf-8") as arquivo:
         json.dump(par, arquivo, indent=4, ensure_ascii=False)
         
-    os.remove(PROVENANCE / "temp.json")
+    os.remove(PATH_OUT / "temp.json")
 
 shutil.rmtree(PATH_OUT)
 
