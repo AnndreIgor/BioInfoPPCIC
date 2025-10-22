@@ -12,7 +12,7 @@ def select_random_fasta_files() -> list[str]:
     Seleciona aleatoriamente um número entre 1 e 5 de arquivos FASTA de um conjunto predefinido.
     Retorna uma lista de nomes de arquivos.
     """
-    fasta_files = os.listdir(INPUT_SEQUENCES)
+    fasta_files = [file for file in os.listdir(INPUT_SEQUENCES) if file.endswith('.fasta')]
     num_files = random.randint(2, len(fasta_files))
     return random.sample(fasta_files, num_files)
 
