@@ -9,6 +9,7 @@ import json
 import time
 import datetime as dt
 import sys
+import shutil
 
 from pathlib import Path
 
@@ -31,12 +32,12 @@ NUCLEOS = int(os.getenv("NSLOTS", "4"))
 # %%
 PATH_DATA = Path('../data')
 INPUT_SEQUENCES = PATH_DATA / 'full_dataset_plasmodium'
-PATH_OUT = PATH_DATA / 'out'
+PATH_OUT = PATH_DATA / f'out_{os.uname().nodename}_{dt.datetime.now().strftime("%H%M%S")}'
 SEQUENCIAS_ALINHADAS = PATH_OUT / 'tmp'
 ARVORES_FILOGENETICAS = PATH_OUT / 'Trees'
 SUBARVORES = PATH_OUT / 'Subtrees'
 PROVENANCE = PATH_DATA / 'provenance'
-SIMILARIDADES = PATH_OUT / 'Similaridades'
+SIMILARIDADES = PATH_DATA / 'Similaridades'
 
 # %%
 # Criar diretórios de saída, se não existirem
@@ -46,6 +47,9 @@ os.makedirs(ARVORES_FILOGENETICAS, exist_ok=True)
 os.makedirs(SUBARVORES, exist_ok=True)
 os.makedirs(SIMILARIDADES, exist_ok=True)
 os.makedirs(PROVENANCE, exist_ok=True)
+
+# %%
+
 
 # %%
 # --- Configuração do Parsl ---
@@ -395,10 +399,6 @@ if __name__ == '__main__':
         
     os.remove(PROVENANCE / "temp.json")
 
-# %%
-clean_NoPipe()
-clean_tmp()
-clean_Trees()
-clean_subtrees()
+shutil.rmtree(PATH_OUT)
 
 
