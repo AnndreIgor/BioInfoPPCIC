@@ -10,7 +10,7 @@ date
 
 # Aqui entra o comando Python
 cd code
-python3 .venv/bin/python/main.py
+../.venv/bin/python main.py
 
 date
 echo "Job finalizado."
