@@ -3,9 +3,28 @@ from typing import Dict, Any, Optional
 import os
 from pathlib import Path
 import json
+import numpy as np
 
 PATH_DATA = Path('../data')
 INPUT_SEQUENCES = PATH_DATA / 'full_dataset_plasmodium'
+
+def sorteio_exponencial_inteiro(limite=400, scale=80):
+    """
+    Sorteia um número inteiro entre 0 e `limite`,
+    com maior chance de valores próximos de zero,
+    usando uma distribuição exponencial.
+
+    Parâmetros:
+        limite (int): valor máximo possível (default = 400)
+        scale (float): parâmetro de escala da distribuição exponencial 
+                       (valores menores concentram mais em 0)
+
+    Retorna:
+        int: número sorteado
+    """
+    valor = np.random.exponential(scale=scale)
+    valor = int(round(valor))
+    return min(valor, limite)
 
 def select_random_fasta_files() -> list[str]:
     """
@@ -13,9 +32,7 @@ def select_random_fasta_files() -> list[str]:
     Retorna uma lista de nomes de arquivos.
     """
     fasta_files = [file for file in os.listdir(INPUT_SEQUENCES) if file.endswith('.fasta')]
-    num_files = random.randint(2, len(fasta_files))
-    if num_files > 75:
-        num_files = 75
+    num_files = sorteio_exponencial_inteiro(limite=100, scale=80)
     return random.sample(fasta_files, num_files)
 
 def random_clustalw_align_params(seed: Optional[int] = None) -> Dict[str, Any]:
