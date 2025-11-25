@@ -1,0 +1,5 @@
+/code/runinfo
+/data/out
+/data/provenance
+.venv
+*.pyc
